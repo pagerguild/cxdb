@@ -250,7 +250,7 @@ fn handle_request(
                     .iter()
                     .map(|s| {
                         let mut session_obj = json!({
-                            "session_id": s.session_id.to_string(),
+                            "session_id": format_id(s.session_id, &U64Format::Number),
                             "client_tag": s.client_tag,
                             "connected_at": s.connected_at,
                             "last_activity_at": s.last_activity_at,
@@ -302,8 +302,8 @@ fn handle_request(
                 });
 
                 let resp = json!({
-                    "context_id": head.context_id.to_string(),
-                    "head_turn_id": head.head_turn_id.to_string(),
+                    "context_id": format_id(head.context_id, &U64Format::Number),
+                    "head_turn_id": format_id(head.head_turn_id, &U64Format::Number),
                     "head_depth": head.head_depth,
                 });
                 let bytes = serde_json::to_vec(&resp)
@@ -335,8 +335,8 @@ fn handle_request(
                 });
 
                 let resp = json!({
-                    "context_id": head.context_id.to_string(),
-                    "head_turn_id": head.head_turn_id.to_string(),
+                    "context_id": format_id(head.context_id, &U64Format::Number),
+                    "head_turn_id": format_id(head.head_turn_id, &U64Format::Number),
                     "head_depth": head.head_depth,
                 });
                 let bytes = serde_json::to_vec(&resp)
@@ -368,8 +368,8 @@ fn handle_request(
                 });
 
                 let resp = json!({
-                    "context_id": head.context_id.to_string(),
-                    "head_turn_id": head.head_turn_id.to_string(),
+                    "context_id": format_id(head.context_id, &U64Format::Number),
+                    "head_turn_id": format_id(head.head_turn_id, &U64Format::Number),
                     "head_depth": head.head_depth,
                 });
                 let bytes = serde_json::to_vec(&resp)
@@ -423,8 +423,8 @@ fn handle_request(
                                 let is_live = session.is_some();
 
                                 let mut obj = json!({
-                                    "context_id": context_id.to_string(),
-                                    "head_turn_id": head.head_turn_id.to_string(),
+                                    "context_id": format_id(context_id, &U64Format::Number),
+                                    "head_turn_id": format_id(head.head_turn_id, &U64Format::Number),
                                     "head_depth": head.head_depth,
                                     "created_at_unix_ms": head.created_at_unix_ms,
                                     "is_live": is_live,
@@ -582,7 +582,7 @@ fn handle_request(
                     .collect();
 
                 let resp = json!({
-                    "context_id": context_id.to_string(),
+                    "context_id": format_id(context_id, &U64Format::Number),
                     "recursive": recursive,
                     "count": children.len(),
                     "children": children,
@@ -622,18 +622,18 @@ fn handle_request(
                             prov_with_server_info.client_address = session_peer_addr;
                         }
                         json!({
-                            "context_id": context_id.to_string(),
+                            "context_id": format_id(context_id, &U64Format::Number),
                             "provenance": prov_with_server_info,
                         })
                     } else {
                         json!({
-                            "context_id": context_id.to_string(),
+                            "context_id": format_id(context_id, &U64Format::Number),
                             "provenance": null,
                         })
                     }
                 } else {
                     json!({
-                        "context_id": context_id.to_string(),
+                        "context_id": format_id(context_id, &U64Format::Number),
                         "provenance": null,
                     })
                 };
@@ -719,8 +719,8 @@ fn handle_request(
                 }
 
                 let resp = json!({
-                    "context_id": context_id.to_string(),
-                    "turn_id": record.turn_id.to_string(),
+                    "context_id": format_id(context_id, &U64Format::Number),
+                    "turn_id": format_id(record.turn_id, &U64Format::Number),
                     "depth": record.depth,
                     "content_hash": hex::encode(hash.as_bytes()),
                 });
@@ -829,11 +829,11 @@ fn handle_request(
                     let mut turn_obj = Map::new();
                     turn_obj.insert(
                         "turn_id".into(),
-                        JsonValue::String(item.record.turn_id.to_string()),
+                        format_id(item.record.turn_id, &u64_format),
                     );
                     turn_obj.insert(
                         "parent_turn_id".into(),
-                        JsonValue::String(item.record.parent_turn_id.to_string()),
+                        format_id(item.record.parent_turn_id, &u64_format),
                     );
                     turn_obj.insert("depth".into(), JsonValue::Number(item.record.depth.into()));
                     turn_obj.insert(
@@ -913,10 +913,12 @@ fn handle_request(
                     out_turns.push(JsonValue::Object(turn_obj));
                 }
 
-                let next_before = turns.first().map(|t| t.record.turn_id.to_string());
+                let next_before = turns
+                    .first()
+                    .map(|t| format_id(t.record.turn_id, &u64_format));
                 let meta = json!({
-                    "context_id": context_id.to_string(),
-                    "head_turn_id": head.head_turn_id.to_string(),
+                    "context_id": format_id(context_id, &u64_format),
+                    "head_turn_id": format_id(head.head_turn_id, &u64_format),
                     "head_depth": head.head_depth,
                     "registry_bundle_id": registry.last_bundle_id(),
                 });
@@ -1012,7 +1014,7 @@ fn handle_request(
                     .collect();
 
                 let resp = json!({
-                    "turn_id": turn_id.to_string(),
+                    "turn_id": format_id(turn_id, &U64Format::Number),
                     "path": path,
                     "fs_root_hash": hex::encode(fs_root),
                     "entries": entries_json,
@@ -1057,7 +1059,7 @@ fn handle_request(
                                 EntryKind::Symlink => "symlink",
                             };
                             let resp = json!({
-                                "turn_id": turn_id.to_string(),
+                                "turn_id": format_id(turn_id, &U64Format::Number),
                                 "path": path,
                                 "name": entry.name,
                                 "kind": kind_str,
@@ -1142,7 +1144,7 @@ fn handle_request(
                             .collect();
 
                         let resp = json!({
-                            "turn_id": turn_id.to_string(),
+                            "turn_id": format_id(turn_id, &U64Format::Number),
                             "path": path,
                             "fs_root_hash": hex::encode(fs_root),
                             "entries": entries_json,
@@ -1324,8 +1326,8 @@ fn context_to_json(
         .filter(|t| !t.is_empty());
 
     let mut obj = json!({
-        "context_id": head.context_id.to_string(),
-        "head_turn_id": head.head_turn_id.to_string(),
+        "context_id": format_id(head.context_id, &U64Format::Number),
+        "head_turn_id": format_id(head.head_turn_id, &U64Format::Number),
         "head_depth": head.head_depth,
         "created_at_unix_ms": head.created_at_unix_ms,
         "is_live": is_live,
@@ -1335,7 +1337,7 @@ fn context_to_json(
         obj["client_tag"] = JsonValue::String(tag);
     }
     if let Some(sid) = session_id {
-        obj["session_id"] = JsonValue::String(sid.to_string());
+        obj["session_id"] = format_id(sid, &U64Format::Number);
     }
     if let Some(ts) = last_activity_at {
         obj["last_activity_at"] = JsonValue::Number(ts.into());
@@ -1379,12 +1381,12 @@ fn context_to_json(
         let child_context_ids = store.child_context_ids(context_id);
         let child_context_ids_json: Vec<JsonValue> = child_context_ids
             .iter()
-            .map(|id| JsonValue::String(id.to_string()))
+            .map(|id| format_id(*id, &U64Format::Number))
             .collect();
 
         obj["lineage"] = json!({
-            "parent_context_id": parent_context_id.map(|v| v.to_string()),
-            "root_context_id": root_context_id.map(|v| v.to_string()),
+            "parent_context_id": parent_context_id.map(|v| format_id(v, &U64Format::Number)),
+            "root_context_id": root_context_id.map(|v| format_id(v, &U64Format::Number)),
             "spawn_reason": spawn_reason,
             "child_context_count": child_context_ids.len(),
             "child_context_ids": child_context_ids_json,
@@ -1462,6 +1464,21 @@ fn get_optional_u64(body: &JsonValue, key: &str) -> Result<Option<u64>> {
     match body.get(key) {
         Some(value) => parse_json_u64(value, key).map(Some),
         None => Ok(None),
+    }
+}
+
+/// Format a `u64` ID according to the requested `U64Format`.
+///
+/// When `U64Format::String`, the value is returned as a JSON string (e.g. `"42"`).
+/// When `U64Format::Number`, the value is returned as a JSON number (e.g. `42`).
+///
+/// This is used for envelope/metadata fields (turn_id, context_id, etc.) so
+/// that the HTTP API can match the binary protocol's native integer
+/// representation when callers opt in via `?u64_format=number`.
+fn format_id(id: u64, format: &U64Format) -> JsonValue {
+    match format {
+        U64Format::String => JsonValue::String(id.to_string()),
+        U64Format::Number => JsonValue::Number(id.into()),
     }
 }
 

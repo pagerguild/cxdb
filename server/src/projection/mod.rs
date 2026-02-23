@@ -166,7 +166,14 @@ fn render_field_value(
     }
 }
 
-/// Recursively project a value using a referenced type's descriptor
+/// Recursively project a value using a referenced type's descriptor.
+///
+/// When `options.include_unknown` is true, any tags present in the msgpack
+/// payload but absent from the type descriptor are collected into an
+/// `"_unknown"` key on the returned object.  This mirrors the top-level
+/// `project_msgpack` behaviour and ensures that clients reading via the HTTP
+/// API can discover extension fields added by newer writers (e.g. Amplifier
+/// adding `event_blobs` or `child_context_id` to a ToolCallItem).
 fn render_type_ref(
     value: &Value,
     type_ref: &str,
@@ -190,6 +197,21 @@ fn render_type_ref(
         if let Some(val) = map.get(tag) {
             let rendered = render_field_value(val, field, registry, options);
             data.insert(field.name.clone(), rendered);
+        }
+    }
+
+    // Propagate include_unknown into nested types — collect tags that the
+    // descriptor doesn't know about so they surface through the HTTP API.
+    if options.include_unknown {
+        let mut unknown = Map::new();
+        for (tag, val) in map.iter() {
+            if type_spec.fields.contains_key(tag) {
+                continue;
+            }
+            unknown.insert(tag.to_string(), render_value(val, options));
+        }
+        if !unknown.is_empty() {
+            data.insert("_unknown".into(), JsonValue::Object(unknown));
         }
     }
 

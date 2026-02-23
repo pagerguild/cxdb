@@ -512,3 +512,224 @@ fn array_shorthand_ref_recursively_projects() {
         "numeric key '1' should not appear in shorthand ref array items"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Tests for include_unknown propagation into nested types
+// ---------------------------------------------------------------------------
+
+/// Helper: build a registry with a parent type containing a nested ref and an
+/// array of refs, so we can test unknown-tag propagation at every nesting level.
+fn build_nested_registry_with_unknown() -> (tempfile::TempDir, cxdb_server::registry::Registry) {
+    let dir = tempdir().expect("tempdir");
+    let mut registry = Registry::open(dir.path()).expect("open registry");
+
+    let bundle = r#"
+    {
+      "registry_version": 1,
+      "bundle_id": "unknown-nested-test",
+      "types": {
+        "test:Root": {
+          "versions": {
+            "1": {
+              "fields": {
+                "1": { "name": "label", "type": "string" },
+                "2": { "name": "nested", "type": "ref", "ref": "test:Nested" },
+                "3": { "name": "items", "type": "array", "items": { "ref": "test:ArrayItem" } }
+              }
+            }
+          }
+        },
+        "test:Nested": {
+          "versions": {
+            "1": {
+              "fields": {
+                "1": { "name": "name", "type": "string" }
+              }
+            }
+          }
+        },
+        "test:ArrayItem": {
+          "versions": {
+            "1": {
+              "fields": {
+                "1": { "name": "id", "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "enums": {}
+    }
+    "#;
+
+    registry
+        .put_bundle("unknown-nested-test", bundle.as_bytes())
+        .expect("put bundle");
+    (dir, registry)
+}
+
+#[test]
+fn nested_ref_includes_unknown_tags() {
+    let (_dir, registry) = build_nested_registry_with_unknown();
+    let desc = registry
+        .get_type_version("test:Root", 1)
+        .expect("descriptor");
+
+    // Build msgpack: Root {
+    //   label: "hello",
+    //   nested: { 1: "known", 99: "extra_nested" },   <-- tag 99 is unknown
+    //   items: []
+    // }
+    let nested_map = vec![
+        (Value::Integer(1.into()), Value::String("known".into())),
+        (
+            Value::Integer(99.into()),
+            Value::String("extra_nested".into()),
+        ),
+    ];
+    let root_map = vec![
+        (Value::Integer(1.into()), Value::String("hello".into())),
+        (Value::Integer(2.into()), Value::Map(nested_map)),
+        (Value::Integer(3.into()), Value::Array(vec![])),
+    ];
+    let value = Value::Map(root_map);
+
+    let mut buf = Vec::new();
+    rmpv::encode::write_value(&mut buf, &value).expect("encode msgpack");
+
+    // With include_unknown = true
+    let options = RenderOptions {
+        include_unknown: true,
+        ..default_options()
+    };
+    let projection = project_msgpack(&buf, desc, &registry, &options).expect("project");
+    let data = projection.data.as_object().expect("data object");
+
+    // Known field is present
+    let nested = data
+        .get("nested")
+        .unwrap()
+        .as_object()
+        .expect("nested object");
+    assert_eq!(nested.get("name").unwrap().as_str().unwrap(), "known");
+
+    // Unknown tag 99 must appear in _unknown
+    let nested_unknown = nested
+        .get("_unknown")
+        .expect("nested _unknown must be present when include_unknown=true")
+        .as_object()
+        .expect("_unknown is object");
+    assert_eq!(
+        nested_unknown.get("99").unwrap().as_str().unwrap(),
+        "extra_nested"
+    );
+}
+
+#[test]
+fn nested_ref_omits_unknown_when_disabled() {
+    let (_dir, registry) = build_nested_registry_with_unknown();
+    let desc = registry
+        .get_type_version("test:Root", 1)
+        .expect("descriptor");
+
+    // Same payload as above — tag 99 is unknown on the nested ref
+    let nested_map = vec![
+        (Value::Integer(1.into()), Value::String("known".into())),
+        (
+            Value::Integer(99.into()),
+            Value::String("extra_nested".into()),
+        ),
+    ];
+    let root_map = vec![
+        (Value::Integer(1.into()), Value::String("hello".into())),
+        (Value::Integer(2.into()), Value::Map(nested_map)),
+        (Value::Integer(3.into()), Value::Array(vec![])),
+    ];
+    let value = Value::Map(root_map);
+
+    let mut buf = Vec::new();
+    rmpv::encode::write_value(&mut buf, &value).expect("encode msgpack");
+
+    // With include_unknown = false (default behaviour)
+    let options = RenderOptions {
+        include_unknown: false,
+        ..default_options()
+    };
+    let projection = project_msgpack(&buf, desc, &registry, &options).expect("project");
+    let data = projection.data.as_object().expect("data object");
+
+    let nested = data
+        .get("nested")
+        .unwrap()
+        .as_object()
+        .expect("nested object");
+
+    // _unknown must NOT be present
+    assert!(
+        nested.get("_unknown").is_none(),
+        "_unknown should not appear when include_unknown is false"
+    );
+}
+
+#[test]
+fn array_ref_items_include_unknown_tags() {
+    let (_dir, registry) = build_nested_registry_with_unknown();
+    let desc = registry
+        .get_type_version("test:Root", 1)
+        .expect("descriptor");
+
+    // Build msgpack: Root {
+    //   label: "hello",
+    //   nested: { 1: "n" },
+    //   items: [
+    //     { 1: "item_a", 50: 123 },   <-- tag 50 is unknown
+    //     { 1: "item_b" }              <-- no unknowns
+    //   ]
+    // }
+    let nested_map = vec![(Value::Integer(1.into()), Value::String("n".into()))];
+    let item_a = vec![
+        (Value::Integer(1.into()), Value::String("item_a".into())),
+        (Value::Integer(50.into()), Value::Integer(123.into())),
+    ];
+    let item_b = vec![(Value::Integer(1.into()), Value::String("item_b".into()))];
+    let root_map = vec![
+        (Value::Integer(1.into()), Value::String("hello".into())),
+        (Value::Integer(2.into()), Value::Map(nested_map)),
+        (
+            Value::Integer(3.into()),
+            Value::Array(vec![Value::Map(item_a), Value::Map(item_b)]),
+        ),
+    ];
+    let value = Value::Map(root_map);
+
+    let mut buf = Vec::new();
+    rmpv::encode::write_value(&mut buf, &value).expect("encode msgpack");
+
+    let options = RenderOptions {
+        include_unknown: true,
+        ..default_options()
+    };
+    let projection = project_msgpack(&buf, desc, &registry, &options).expect("project");
+    let data = projection.data.as_object().expect("data object");
+
+    let items = data.get("items").unwrap().as_array().expect("items array");
+    assert_eq!(items.len(), 2);
+
+    // First item has unknown tag 50
+    let first = items[0].as_object().expect("first item");
+    assert_eq!(first.get("id").unwrap().as_str().unwrap(), "item_a");
+    let first_unknown = first
+        .get("_unknown")
+        .expect("first item _unknown must be present")
+        .as_object()
+        .expect("_unknown is object");
+    assert!(first_unknown.contains_key("50"));
+
+    // Second item has NO unknown tags — _unknown should be absent
+    let second = items[1].as_object().expect("second item");
+    assert_eq!(second.get("id").unwrap().as_str().unwrap(), "item_b");
+    assert!(
+        second.get("_unknown").is_none(),
+        "_unknown should not appear when there are no unknown tags"
+    );
+}
