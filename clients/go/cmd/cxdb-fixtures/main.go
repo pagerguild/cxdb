@@ -40,6 +40,7 @@ func main() {
 		getLastFixture("get_last_payload", 1, 5, true),
 		attachFsFixture("attach_fs", 99, testHash(0xAA)),
 		putBlobFixture("put_blob", []byte("hello blob")),
+		getBlobFixture("get_blob", testHash(0xCC)),
 		appendWithFsFixture("append_with_fs", 1, 0, "cxdb.ConversationItem", 3, []byte{0x91, 0x04}, "", testHash(0xBB)),
 	}
 
@@ -129,6 +130,12 @@ func getLastFixture(name string, contextID uint64, limit uint32, includePayload 
 		payload = appendU32(payload, 0)
 	}
 	return Fixture{Name: name, MsgType: 6, Flags: 0, PayloadHex: hex.EncodeToString(payload)}
+}
+
+func getBlobFixture(name string, hash [32]byte) Fixture {
+	payload := make([]byte, 0, 32)
+	payload = append(payload, hash[:]...)
+	return Fixture{Name: name, MsgType: 9, Flags: 0, PayloadHex: hex.EncodeToString(payload)}
 }
 
 func attachFsFixture(name string, turnID uint64, fsHash [32]byte) Fixture {

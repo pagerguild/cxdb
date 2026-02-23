@@ -58,6 +58,29 @@ func (c *Client) AttachFs(ctx context.Context, req *AttachFsRequest) (*AttachFsR
 	return result, nil
 }
 
+// GetBlob retrieves a blob by its BLAKE3-256 hash from the content-addressed store.
+// Returns ErrBlobNotFound (wrapped in a ServerError) if the hash doesn't exist.
+func (c *Client) GetBlob(ctx context.Context, hash [32]byte) ([]byte, error) {
+	resp, err := c.sendRequest(ctx, msgGetBlob, hash[:])
+	if err != nil {
+		if IsServerError(err, 404) {
+			return nil, fmt.Errorf("%w: %s", ErrBlobNotFound, err)
+		}
+		return nil, fmt.Errorf("get blob: %w", err)
+	}
+
+	if len(resp.payload) < 4 {
+		return nil, fmt.Errorf("%w: get blob response too short (%d bytes)", ErrInvalidResponse, len(resp.payload))
+	}
+
+	rawLen := binary.LittleEndian.Uint32(resp.payload[0:4])
+	if uint32(len(resp.payload)-4) < rawLen {
+		return nil, fmt.Errorf("%w: get blob payload truncated (expected %d, got %d)", ErrInvalidResponse, rawLen, len(resp.payload)-4)
+	}
+
+	return resp.payload[4 : 4+rawLen], nil
+}
+
 // PutBlobRequest contains parameters for storing a blob.
 type PutBlobRequest struct {
 	// Data is the raw blob content.

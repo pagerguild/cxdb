@@ -319,10 +319,13 @@ fn handle_client(
             x if x == MsgType::GetHead as u16 => {
                 let context_id = parse_get_head(&payload)?;
                 let store = store.read().unwrap();
-                let head = store.get_head(context_id)?;
-                let resp =
-                    encode_ctx_create_resp(head.context_id, head.head_turn_id, head.head_depth)?;
-                Ok((MsgType::GetHead as u16, resp))
+                match store.get_head(context_id) {
+                    Ok(head) => {
+                        let resp = encode_ctx_create_resp(head.context_id, head.head_turn_id, head.head_depth)?;
+                        Ok((MsgType::GetHead as u16, resp))
+                    }
+                    Err(e) => Err(e),
+                }
             }
             x if x == MsgType::AppendTurn as u16 => {
                 let req = parse_append_turn(&payload, header.flags)?;
@@ -399,12 +402,13 @@ fn handle_client(
                 // Verify hash matches
                 let actual_hash = blake3::hash(&req.data);
                 if actual_hash.as_bytes() != &req.hash {
-                    return Err(StoreError::InvalidInput("blob hash mismatch".into()));
+                    Err(StoreError::InvalidInput("blob hash mismatch".into()))
+                } else {
+                    let was_new = !store.blob_store.contains(&req.hash);
+                    store.blob_store.put_if_absent(req.hash, &req.data)?;
+                    let resp = encode_put_blob_resp(&req.hash, was_new)?;
+                    Ok((MsgType::PutBlob as u16, resp))
                 }
-                let was_new = !store.blob_store.contains(&req.hash);
-                store.blob_store.put_if_absent(req.hash, &req.data)?;
-                let resp = encode_put_blob_resp(&req.hash, was_new)?;
-                Ok((MsgType::PutBlob as u16, resp))
             }
             x if x == MsgType::GetLast as u16 => {
                 let req = parse_get_last(&payload)?;
@@ -447,12 +451,16 @@ fn handle_client(
             x if x == MsgType::GetBlob as u16 => {
                 let hash = parse_get_blob(&payload)?;
                 let store = store.read().unwrap();
-                let bytes = store.get_blob(&hash)?;
-                metrics.record_get_blob(op_start.elapsed());
-                let mut resp = Vec::new();
-                resp.write_u32::<byteorder::LittleEndian>(bytes.len() as u32)?;
-                resp.extend_from_slice(&bytes);
-                Ok((MsgType::GetBlob as u16, resp))
+                match store.get_blob(&hash) {
+                    Ok(bytes) => {
+                        metrics.record_get_blob(op_start.elapsed());
+                        let mut resp = Vec::new();
+                        resp.write_u32::<byteorder::LittleEndian>(bytes.len() as u32)?;
+                        resp.extend_from_slice(&bytes);
+                        Ok((MsgType::GetBlob as u16, resp))
+                    }
+                    Err(e) => Err(e),
+                }
             }
             _ => Err(StoreError::InvalidInput("unknown msg_type".into())),
         };

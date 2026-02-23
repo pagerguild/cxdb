@@ -21,6 +21,9 @@ var (
 
 	// ErrInvalidResponse is returned when the server response is malformed.
 	ErrInvalidResponse = errors.New("cxdb: invalid response")
+
+	// ErrBlobNotFound is returned when a blob hash doesn't exist in the store.
+	ErrBlobNotFound = errors.New("cxdb: blob not found")
 )
 
 // ServerError represents an error returned by the CXDB server.
