@@ -467,6 +467,17 @@ func (rc *ReconnectingClient) AttachFs(ctx context.Context, req *AttachFsRequest
 	return result, err
 }
 
+// GetBlob retrieves a blob by its BLAKE3-256 hash.
+func (rc *ReconnectingClient) GetBlob(ctx context.Context, hash [32]byte) ([]byte, error) {
+	var result []byte
+	err := rc.enqueue(ctx, "GetBlob", func(c *Client) error {
+		var opErr error
+		result, opErr = c.GetBlob(ctx, hash)
+		return opErr
+	})
+	return result, err
+}
+
 // PutBlob stores a blob and returns its hash.
 func (rc *ReconnectingClient) PutBlob(ctx context.Context, req *PutBlobRequest) (*PutBlobResult, error) {
 	var result *PutBlobResult

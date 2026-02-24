@@ -1,0 +1,6 @@
+{
+  "name": "get_blob",
+  "msg_type": 9,
+  "flags": 0,
+  "payload_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+}
