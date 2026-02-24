@@ -321,7 +321,11 @@ fn handle_client(
                 let store = store.read().unwrap();
                 match store.get_head(context_id) {
                     Ok(head) => {
-                        let resp = encode_ctx_create_resp(head.context_id, head.head_turn_id, head.head_depth)?;
+                        let resp = encode_ctx_create_resp(
+                            head.context_id,
+                            head.head_turn_id,
+                            head.head_depth,
+                        )?;
                         Ok((MsgType::GetHead as u16, resp))
                     }
                     Err(e) => Err(e),
