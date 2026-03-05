@@ -17,6 +17,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- Build Rust binary on the runner ---
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Build cxdb-server
+        run: cargo build --release --manifest-path server/Cargo.toml
+
+      # --- Build frontend ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      # --- Package into Docker image ---
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -42,5 +72,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            BINARY=target/release/cxdb-server
+            FRONTEND=frontend/out
